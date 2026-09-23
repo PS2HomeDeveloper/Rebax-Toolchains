@@ -1,0 +1,149 @@
+name: Build Toolchains
+
+on:
+  # يعمل عند تعديل هذا الملف وحفظه (push)
+  push:
+    paths:
+      - ".github/workflows/build-toolchains.yml"
+  # ويعمل يدويا من تبويب Actions
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_REPO: PS2HomeDeveloper/Rebax-Toolchains
+  RELEASE_TAG: "1.0.0"
+  PS2DEV_BASE: https://github.com/ps2dev/ps2dev/releases/download/v2.0.0
+  MAKE_BASE: https://github.com/PS2HomeDeveloper/Make/releases/download/4.4.1
+
+jobs:
+  # التأكد من وجود الريليس قبل بدء الرفع المتوازي
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$RELEASE_REPO" \
+              --title "$RELEASE_TAG" \
+              --notes "Rebax Toolchains $RELEASE_TAG"
+          fi
+
+  build:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ---------- Android (make فقط) ----------
+          - name: android-arm64-v8a
+            make_asset: make_android_arm64-v8a
+            make_out: make
+            ps2dev_asset: ""
+          - name: android-armeabi-v7a
+            make_asset: make_android_armeabi-v7a
+            make_out: make
+            ps2dev_asset: ""
+          - name: android-x86
+            make_asset: make_android_x86
+            make_out: make
+            ps2dev_asset: ""
+          - name: android-x86_64
+            make_asset: make_android_x86_64
+            make_out: make
+            ps2dev_asset: ""
+          # ---------- iOS (make فقط) ----------
+          - name: ios-arm64
+            make_asset: make_ios_arm64
+            make_out: make
+            ps2dev_asset: ""
+          - name: ios-x86_64
+            make_asset: make_ios_x86_64
+            make_out: make
+            ps2dev_asset: ""
+          # ---------- Linux ----------
+          - name: linux-arm64
+            make_asset: make_linux_arm64
+            make_out: make
+            ps2dev_asset: ps2dev-ubuntu-24.04-arm.tar.gz
+          - name: linux-x86
+            make_asset: make_linux_x86
+            make_out: make
+            ps2dev_asset: ""
+          - name: linux-x86_64
+            make_asset: make_linux_x86_64
+            make_out: make
+            ps2dev_asset: ps2dev-ubuntu-latest.tar.gz
+          # ---------- macOS ----------
+          - name: macos-arm64
+            make_asset: make_macos_arm64
+            make_out: make
+            ps2dev_asset: ps2dev-macos-latest.tar.gz
+          - name: macos-x86_64
+            make_asset: make_macos_x86_64
+            make_out: make
+            ps2dev_asset: ps2dev-macos-15-intel.tar.gz
+          # ---------- Windows ----------
+          - name: windows-arm64
+            make_asset: make_windows_arm64.exe
+            make_out: make.exe
+            ps2dev_asset: ""
+          - name: windows-x86
+            make_asset: make_windows_x86.exe
+            make_out: make.exe
+            ps2dev_asset: ""
+          - name: windows-x86_64
+            make_asset: make_windows_x86_64.exe
+            make_out: make.exe
+            ps2dev_asset: ps2dev-windows-latest.tar.gz
+
+    env:
+      PKG_NAME: rebax-toolchains-${{ matrix.name }}
+      MAKE_ASSET: ${{ matrix.make_asset }}
+      MAKE_OUT: ${{ matrix.make_out }}
+      PS2DEV_ASSET: ${{ matrix.ps2dev_asset }}
+
+    steps:
+      - name: Prepare package folder
+        run: mkdir -p pkg
+
+      - name: Download make
+        run: |
+          curl -fL --retry 3 -o "pkg/$MAKE_OUT" "$MAKE_BASE/$MAKE_ASSET"
+          chmod +x "pkg/$MAKE_OUT"
+
+      - name: Download and repack ps2dev
+        if: ${{ matrix.ps2dev_asset != '' }}
+        run: |
+          curl -fL --retry 3 -o ps2dev.tar.gz "$PS2DEV_BASE/$PS2DEV_ASSET"
+          mkdir extract
+          tar -xzf ps2dev.tar.gz -C extract
+          rm -f ps2dev.tar.gz
+          if [ ! -d extract/ps2dev ]; then
+            echo "::error::Folder 'ps2dev' not found inside $PS2DEV_ASSET"
+            ls -la extract
+            exit 1
+          fi
+          tar -cJf pkg/ps2dev.tar.xz -C extract ps2dev
+          rm -rf extract
+
+      - name: Create final package
+        run: |
+          cd pkg
+          tar -cJf "../$PKG_NAME.tar.xz" *
+          cd ..
+          echo "Package contents:"
+          tar -tJf "$PKG_NAME.tar.xz"
+          ls -lh "$PKG_NAME.tar.xz"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$RELEASE_TAG" "$PKG_NAME.tar.xz" \
+            --repo "$RELEASE_REPO" --clobber

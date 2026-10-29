@@ -32,6 +32,21 @@ COMMON = [
     "-DLLVM_DISTRIBUTION_COMPONENTS=" + ";".join(COMPONENTS),
 ]
 
+HOSTS = [
+    {"id": "linux-x86_64", "runner": "ubuntu-24.04", "kind": "linux", "arch": "x86_64"},
+    {"id": "linux-arm64", "runner": "ubuntu-24.04-arm", "kind": "linux", "arch": "arm64"},
+    {"id": "linux-x86", "runner": "ubuntu-24.04", "kind": "linux32", "arch": "x86"},
+    {"id": "linux-arm", "runner": "ubuntu-24.04", "kind": "linuxarm", "arch": "arm"},
+    {"id": "android-arm64-v8a", "runner": "ubuntu-24.04", "kind": "android", "arch": "arm64-v8a"},
+    {"id": "android-armeabi-v7a", "runner": "ubuntu-24.04", "kind": "android", "arch": "armeabi-v7a"},
+    {"id": "android-x86", "runner": "ubuntu-24.04", "kind": "android", "arch": "x86"},
+    {"id": "android-x86_64", "runner": "ubuntu-24.04", "kind": "android", "arch": "x86_64"},
+    {"id": "windows-x86_64", "runner": "windows-2022", "kind": "windows", "arch": "x64"},
+    {"id": "windows-x86", "runner": "windows-2022", "kind": "windows", "arch": "x86"},
+    {"id": "macos-x86_64", "runner": "macos-15-intel", "kind": "macos", "arch": "x86_64"},
+    {"id": "macos-arm64", "runner": "macos-15", "kind": "macos", "arch": "arm64"},
+]
+
 ANDROID_ABI = {
     "arm64-v8a": "aarch64-linux-android",
     "armeabi-v7a": "armv7-linux-androideabi",
@@ -136,6 +151,18 @@ def cmd_manifest(a):
     print(len(items), "packages")
 
 
+def cmd_matrix(a):
+    chosen = [h for h in HOSTS if not a.only or h["id"] == a.only]
+    if not chosen:
+        sys.exit("no host matches: " + a.only)
+    line = "matrix=" + json.dumps({"include": chosen}, separators=(",", ":"))
+    out = os.environ.get("GITHUB_OUTPUT")
+    if out:
+        with open(out, "a") as f:
+            f.write(line + "\n")
+    print(line)
+
+
 def main():
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -154,8 +181,10 @@ def main():
     m = sub.add_parser("manifest")
     m.add_argument("--dir", required=True)
     m.add_argument("--version", required=True)
+    x = sub.add_parser("matrix")
+    x.add_argument("--only", default="")
     a = p.parse_args()
-    {"build": cmd_build, "pack": cmd_pack, "manifest": cmd_manifest}[a.cmd](a)
+    {"build": cmd_build, "pack": cmd_pack, "manifest": cmd_manifest, "matrix": cmd_matrix}[a.cmd](a)
 
 
 if __name__ == "__main__":

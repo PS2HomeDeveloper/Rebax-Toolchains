@@ -1,0 +1,125 @@
+name: Build clang packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      llvm_version:
+        description: LLVM version
+        default: "20.1.8"
+      only:
+        description: Build only this host id (empty = all)
+        default: ""
+      release_tag:
+        description: Publish a release with this tag (empty = artifacts only)
+        default: ""
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download LLVM source once
+        run: |
+          curl -fsSL -o llvm-src.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ inputs.llvm_version }}/llvm-project-${{ inputs.llvm_version }}.src.tar.xz"
+          ls -l llvm-src.tar.xz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llvm-src
+          path: llvm-src.tar.xz
+          compression-level: 0
+          retention-days: 1
+
+  build:
+    needs: source
+    if: inputs.only == '' || inputs.only == matrix.id
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: linux-x86_64,        runner: ubuntu-24.04,     kind: linux,    arch: x86_64 }
+          - { id: linux-arm64,         runner: ubuntu-24.04-arm, kind: linux,    arch: arm64 }
+          - { id: linux-x86,           runner: ubuntu-24.04,     kind: linux32,  arch: x86 }
+          - { id: linux-arm,           runner: ubuntu-24.04,     kind: linuxarm, arch: arm }
+          - { id: android-arm64-v8a,   runner: ubuntu-24.04,     kind: android,  arch: arm64-v8a }
+          - { id: android-armeabi-v7a, runner: ubuntu-24.04,     kind: android,  arch: armeabi-v7a }
+          - { id: android-x86,         runner: ubuntu-24.04,     kind: android,  arch: x86 }
+          - { id: android-x86_64,      runner: ubuntu-24.04,     kind: android,  arch: x86_64 }
+          - { id: windows-x86_64,      runner: windows-2022,     kind: windows,  arch: x64 }
+          - { id: windows-x86,         runner: windows-2022,     kind: windows,  arch: x86 }
+          - { id: macos-x86_64,        runner: macos-15-intel,   kind: macos,    arch: x86_64 }
+          - { id: macos-arm64,         runner: macos-15,         kind: macos,    arch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: llvm-src
+
+      - name: Extract source
+        shell: bash
+        run: |
+          mkdir llvm-src
+          tar -xf llvm-src.tar.xz -C llvm-src --strip-components=1
+          rm llvm-src.tar.xz
+
+      - name: Install tools (Linux)
+        if: startsWith(matrix.kind, 'linux') || matrix.kind == 'android'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+          if [ "${{ matrix.kind }}" = "linux32" ]; then sudo apt-get install -y gcc-multilib g++-multilib; fi
+          if [ "${{ matrix.kind }}" = "linuxarm" ]; then sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf; fi
+
+      - name: Install tools (macOS)
+        if: matrix.kind == 'macos'
+        run: brew install ninja
+
+      - name: MSVC environment
+        if: matrix.kind == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Build
+        shell: bash
+        run: python3 scripts/pkg.py build --kind "${{ matrix.kind }}" --arch "${{ matrix.arch }}" --src llvm-src --work build --out install
+        env:
+          PYTHONUNBUFFERED: "1"
+
+      - name: Pack
+        shell: bash
+        run: python3 scripts/pkg.py pack --root install --top clang --name "rebax-clang-${{ matrix.id }}" --dest dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.id }}
+          path: dist/*
+          compression-level: 0
+
+  release:
+    needs: build
+    if: inputs.release_tag != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          path: dist
+          merge-multiple: true
+      - name: Manifest
+        run: python3 scripts/pkg.py manifest --dir dist --version "${{ inputs.llvm_version }}"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: dist/*

@@ -59,7 +59,11 @@ jobs:
         shell: bash
         run: |
           mkdir llvm-src
-          tar -xf llvm-src.tar.xz -C llvm-src --strip-components=1
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            tar -xf llvm-src.tar.xz -C llvm-src --strip-components=1 --exclude='*/test/*' --exclude='*/unittests/*'
+          else
+            tar -xf llvm-src.tar.xz -C llvm-src --strip-components=1
+          fi
           rm llvm-src.tar.xz
 
       - name: Install tools (Linux)

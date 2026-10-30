@@ -96,9 +96,31 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          name: tree-${{ matrix.id }}
+          path: dist/*.tree.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
           name: pkg-${{ matrix.id }}
-          path: dist/*
+          path: |
+            dist/*.tar.xz
+            dist/*.sha256
           compression-level: 0
+
+  trees:
+    needs: build
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tree-*
+          path: trees
+          merge-multiple: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trees-all
+          path: trees/*
 
   release:
     needs: build
@@ -113,7 +135,7 @@ jobs:
           python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
-          pattern: pkg-*
+          pattern: "{pkg,tree}-*"
           path: dist
           merge-multiple: true
       - name: Manifest

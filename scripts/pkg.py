@@ -101,20 +101,30 @@ def cmd_build(a):
     run(["cmake", "--build", build, "--target", target], a.dry_run)
 
 
-def list_tree(root):
-    lines = []
-    for base, dirs, files in os.walk(root):
-        dirs.sort()
-        rel = os.path.relpath(base, root)
-        depth = 0 if rel == "." else rel.count(os.sep) + 1
-        if rel != ".":
-            lines.append("  " * depth + os.path.basename(base) + "/")
-        for f in sorted(files):
-            p = os.path.join(base, f)
-            if os.path.islink(p):
-                lines.append("  " * (depth + 1) + f + " -> " + os.readlink(p))
+def list_tree(root, top):
+    state = {"dirs": 0, "files": 0}
+    lines = [top]
+
+    def walk(path, prefix):
+        names = sorted(os.listdir(path))
+        for i, name in enumerate(names):
+            full = os.path.join(path, name)
+            last = i == len(names) - 1
+            branch = "\u2514\u2500\u2500 " if last else "\u251c\u2500\u2500 "
+            if os.path.islink(full):
+                lines.append(prefix + branch + name + " -> " + os.readlink(full))
+                state["files"] += 1
+            elif os.path.isdir(full):
+                lines.append(prefix + branch + name)
+                state["dirs"] += 1
+                walk(full, prefix + ("    " if last else "\u2502   "))
             else:
-                lines.append("  " * (depth + 1) + f + "  (" + str(os.path.getsize(p)) + " bytes)")
+                lines.append(prefix + branch + name)
+                state["files"] += 1
+
+    walk(root, "")
+    lines.append("")
+    lines.append("%d directories, %d files" % (state["dirs"], state["files"]))
     return "\n".join(lines) + "\n"
 
 
@@ -133,7 +143,7 @@ def cmd_pack(a):
     with tarfile.open(archive, "w:xz", preset=9 | lzma.PRESET_EXTREME) as tf:
         tf.add(a.root, arcname=a.top)
     with open(os.path.join(a.dest, name + ".tree.txt"), "w", encoding="utf-8") as f:
-        f.write(a.top + "/\n" + list_tree(a.root))
+        f.write(list_tree(a.root, a.top))
     digest = sha256(archive)
     with open(os.path.join(a.dest, name + ".sha256"), "w") as f:
         f.write(digest + "  " + name + ".tar.xz\n")

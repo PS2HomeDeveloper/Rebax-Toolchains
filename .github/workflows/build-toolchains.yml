@@ -95,8 +95,43 @@ jobs:
           arch: ${{ matrix.arch }}
 
       - name: Build
+        if: matrix.toolchain == 'clang'
         shell: bash
         run: python3 scripts/${{ matrix.toolchain }}.py --kind "${{ matrix.kind }}" --arch "${{ matrix.arch }}" --src llvm-src --work build --out install
+        env:
+          PYTHONUNBUFFERED: "1"
+
+      - name: Build GCC PS2 (Linux)
+        if: matrix.toolchain == 'gcc-ps2' && matrix.kind == 'linux'
+        run: |
+          docker run --rm -e DEBIAN_FRONTEND=noninteractive -e PYTHONUNBUFFERED=1 -v "$PWD:/w" -w /w ubuntu:20.04 bash -c 'apt-get -y update && apt-get -y install texinfo bison flex gettext autopoint autoconf automake libgmp3-dev libmpfr-dev libmpc-dev cmake g++ gcc git libgsl-dev make patch zlib1g-dev wget curl ca-certificates python3 && python3 scripts/gcc_ps2.py --out install'
+
+      - name: Install tools (GCC PS2, macOS)
+        if: matrix.toolchain == 'gcc-ps2' && matrix.kind == 'macos'
+        run: brew install texinfo bison flex gnu-sed autoconf automake libtool gsl gmp mpfr libmpc md5sha1sum wget curl
+
+      - name: Build GCC PS2 (macOS)
+        if: matrix.toolchain == 'gcc-ps2' && matrix.kind == 'macos'
+        run: python3 scripts/gcc_ps2.py --out install
+        env:
+          PYTHONUNBUFFERED: "1"
+
+      - name: Install MSYS2 (GCC PS2, Windows)
+        if: matrix.toolchain == 'gcc-ps2' && matrix.kind == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          install: >-
+            base-devel git make texinfo flex bison patch binutils mpc-devel tar wget curl
+            autotools gettext gettext-devel python
+            mingw-w64-i686-readline mingw-w64-i686-gcc mingw-w64-i686-cmake
+            mingw-w64-i686-make mingw-w64-i686-libogg
+          update: true
+
+      - name: Build GCC PS2 (Windows)
+        if: matrix.toolchain == 'gcc-ps2' && matrix.kind == 'windows'
+        shell: msys2 {0}
+        run: python3 scripts/gcc_ps2.py --out install
         env:
           PYTHONUNBUFFERED: "1"
 

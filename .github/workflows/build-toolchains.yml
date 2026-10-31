@@ -1,0 +1,162 @@
+name: Build toolchains
+
+on:
+  workflow_dispatch:
+    inputs:
+      toolchain:
+        description: Build only this toolchain group (empty = all)
+        default: ""
+      only:
+        description: Build only this package or host id (empty = all)
+        default: ""
+      llvm_version:
+        description: LLVM version
+        default: "20.1.8"
+      release_tag:
+        description: Publish a release with this tag (empty = artifacts only)
+        default: ""
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: m
+        run: python3 scripts/common.py matrix --toolchain "${{ inputs.toolchain }}" --only "${{ inputs.only }}"
+
+  source-clang:
+    needs: plan
+    if: contains(needs.plan.outputs.matrix, '"toolchain":"clang"')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download LLVM source once
+        run: |
+          curl -fsSL -o llvm-src.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ inputs.llvm_version }}/llvm-project-${{ inputs.llvm_version }}.src.tar.xz"
+          ls -l llvm-src.tar.xz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llvm-src
+          path: llvm-src.tar.xz
+          compression-level: 0
+          retention-days: 1
+
+  build:
+    needs: [plan, source-clang]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.source-clang.result == 'success' || needs.source-clang.result == 'skipped') }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/lib/node_modules /usr/share/swift /opt/microsoft /opt/az /usr/local/share/powershell
+          sudo docker image prune --all --force > /dev/null 2>&1 || true
+          sudo apt-get clean
+          df -h /
+
+      - uses: actions/download-artifact@v4
+        if: matrix.toolchain == 'clang'
+        with:
+          name: llvm-src
+
+      - name: Extract source
+        if: matrix.toolchain == 'clang'
+        shell: bash
+        run: |
+          mkdir llvm-src
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            tar -xf llvm-src.tar.xz -C llvm-src --strip-components=1 --exclude='*/test/*' --exclude='*/unittests/*'
+          else
+            tar -xf llvm-src.tar.xz -C llvm-src --strip-components=1
+          fi
+          rm llvm-src.tar.xz
+
+      - name: Install tools (Linux)
+        if: matrix.toolchain == 'clang' && (startsWith(matrix.kind, 'linux') || matrix.kind == 'android')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+          if [ "${{ matrix.kind }}" = "linux32" ]; then sudo apt-get install -y gcc-multilib g++-multilib; fi
+          if [ "${{ matrix.kind }}" = "linuxarm" ]; then sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf; fi
+
+      - name: Install tools (macOS)
+        if: matrix.toolchain == 'clang' && matrix.kind == 'macos'
+        run: brew install ninja
+
+      - name: MSVC environment
+        if: matrix.toolchain == 'clang' && matrix.kind == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Build
+        shell: bash
+        run: python3 scripts/${{ matrix.toolchain }}.py --kind "${{ matrix.kind }}" --arch "${{ matrix.arch }}" --src llvm-src --work build --out install
+        env:
+          PYTHONUNBUFFERED: "1"
+
+      - name: Pack
+        shell: bash
+        run: python3 scripts/common.py pack --root install --top "${{ matrix.toolchain }}" --name "${{ matrix.name }}" --dest dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tree-${{ matrix.name }}
+          path: dist/*.tree.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.name }}
+          path: |
+            dist/*.tar.xz
+            dist/*.sha256
+          compression-level: 0
+
+  trees:
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tree-*
+          path: trees
+          merge-multiple: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trees-all
+          path: trees/*
+
+  release:
+    needs: build
+    if: inputs.release_tag != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "{pkg,tree}-*"
+          path: dist
+          merge-multiple: true
+      - name: Manifest
+        run: python3 scripts/common.py manifest --dir dist --version "${{ inputs.llvm_version }}"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: dist/*

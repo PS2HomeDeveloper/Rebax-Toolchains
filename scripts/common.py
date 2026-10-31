@@ -12,6 +12,8 @@ TOOLCHAINS = {
         {"id": "android-x86_64", "runner": "ubuntu-24.04", "kind": "android", "arch": "x86_64"},
         {"id": "windows-x86_64", "runner": "windows-2022", "kind": "windows", "arch": "x64"},
         {"id": "windows-x86", "runner": "windows-2022", "kind": "windows", "arch": "x86"},
+        {"id": "windows-arm64", "runner": "windows-11-arm", "kind": "windows", "arch": "arm64"},
+        {"id": "windows-arm", "runner": "windows-2022", "kind": "windowsarm", "arch": "amd64_arm"},
         {"id": "macos-x86_64", "runner": "macos-15-intel", "kind": "macos", "arch": "x86_64"},
         {"id": "macos-arm64", "runner": "macos-15", "kind": "macos", "arch": "arm64"},
     ],
@@ -72,13 +74,17 @@ def pack(root, top, name, dest):
 
 
 def manifest(directory, version):
+    path = os.path.join(directory, "manifest.json")
     items = {}
+    if os.path.isfile(path):
+        with open(path) as f:
+            items = json.load(f).get("packages", {})
     for fn in sorted(os.listdir(directory)):
         if fn.endswith(".tar.xz"):
             p = os.path.join(directory, fn)
             items[fn[:-7]] = {"file": fn, "size": os.path.getsize(p), "sha256": sha256(p)}
-    with open(os.path.join(directory, "manifest.json"), "w") as f:
-        json.dump({"version": version, "packages": items}, f, indent=2)
+    with open(path, "w") as f:
+        json.dump({"packages": dict(sorted(items.items()))}, f, indent=2)
     print(len(items), "packages")
 
 
@@ -90,7 +96,7 @@ def matrix(only, toolchain):
         for h in hosts:
             entry = dict(h)
             entry["toolchain"] = tc
-            entry["name"] = tc + "-host-" + h["id"]
+            entry["name"] = "rebax-" + tc + "-" + h["id"]
             if not only or only == entry["name"] or only == h["id"]:
                 chosen.append(entry)
     if not chosen:

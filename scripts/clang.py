@@ -34,6 +34,9 @@ COMMON = [
     "-DLLVM_DISTRIBUTION_COMPONENTS=" + ";".join(COMPONENTS),
 ]
 
+NATIVE_DIR = "build-native"
+NATIVE_TARGETS = ["llvm-tblgen", "llvm-min-tblgen", "clang-tblgen"]
+
 ANDROID_ABI = {
     "arm64-v8a": "aarch64-linux-android",
     "armeabi-v7a": "armv7-linux-androideabi",
@@ -65,6 +68,11 @@ def platform_args(kind, arch):
     if kind == "windows":
         return ["-DCMAKE_C_COMPILER=cl", "-DCMAKE_CXX_COMPILER=cl",
                 "-DLLVM_USE_CRT_RELEASE=MT"], True
+    if kind == "windowsarm":
+        return ["-DCMAKE_SYSTEM_NAME=Windows", "-DCMAKE_SYSTEM_PROCESSOR=ARM",
+                "-DCMAKE_C_COMPILER=cl", "-DCMAKE_CXX_COMPILER=cl", "-DLLVM_USE_CRT_RELEASE=MT",
+                "-DLLVM_HOST_TRIPLE=armv7-pc-windows-msvc", "-DLLVM_TARGET_ARCH=ARM",
+                "-DLLVM_NATIVE_TOOL_DIR=" + os.path.abspath(os.path.join(NATIVE_DIR, "bin"))], True
     if kind == "macos":
         cpu = "arm64" if arch == "arm64" else "x86_64"
         return ["-DCMAKE_OSX_ARCHITECTURES=" + cpu, "-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"], False
@@ -89,7 +97,7 @@ def remove(path):
 
 
 def prune(prefix, kind):
-    names = list(PRUNE_FILES) + (PRUNE_FILES_WINDOWS if kind == "windows" else [])
+    names = list(PRUNE_FILES) + (PRUNE_FILES_WINDOWS if kind.startswith("windows") else [])
     for name in names:
         for cand in (name, name + ".exe"):
             path = os.path.join(prefix, "bin", cand)
@@ -103,6 +111,15 @@ def prune(prefix, kind):
         for pattern in PRUNE_HEADER_GLOBS:
             for path in glob.glob(os.path.join(inc, pattern)):
                 remove(path)
+
+
+def build_native_tools(src, dry):
+    llvm_src = os.path.join(src, "llvm")
+    cfg = ["cmake", "-S", llvm_src, "-B", NATIVE_DIR, "-G", "Ninja"] + COMMON + [
+        "-DCMAKE_C_COMPILER=cl", "-DCMAKE_CXX_COMPILER=cl", "-DLLVM_USE_CRT_RELEASE=MT"]
+    if not dry:
+        common.run(cfg)
+        common.run(["cmake", "--build", NATIVE_DIR, "--target"] + NATIVE_TARGETS)
 
 
 def build(kind, arch, src, work, out, dry):
@@ -127,8 +144,12 @@ def main():
     p.add_argument("--src", required=True)
     p.add_argument("--work", required=True)
     p.add_argument("--out", required=True)
+    p.add_argument("--stage", default="build", choices=["build", "tools"])
     p.add_argument("--dry-run", action="store_true")
     a = p.parse_args()
+    if a.stage == "tools":
+        build_native_tools(a.src, a.dry_run)
+        return
     build(a.kind, a.arch, a.src, a.work, a.out, a.dry_run)
 
 

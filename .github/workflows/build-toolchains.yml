@@ -13,7 +13,7 @@ on:
         description: LLVM version
         default: "20.1.8"
       release_tag:
-        description: Publish a release with this tag (empty = artifacts only)
+        description: Upload to this release tag (empty = the latest release)
         default: ""
 
 jobs:
@@ -26,25 +26,8 @@ jobs:
       - id: m
         run: python3 scripts/common.py matrix --toolchain "${{ inputs.toolchain }}" --only "${{ inputs.only }}"
 
-  source-clang:
-    needs: plan
-    if: contains(needs.plan.outputs.matrix, '"toolchain":"clang"')
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Download LLVM source once
-        run: |
-          curl -fsSL -o llvm-src.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ inputs.llvm_version }}/llvm-project-${{ inputs.llvm_version }}.src.tar.xz"
-          ls -l llvm-src.tar.xz
-      - uses: actions/upload-artifact@v4
-        with:
-          name: llvm-src
-          path: llvm-src.tar.xz
-          compression-level: 0
-          retention-days: 1
-
   build:
-    needs: [plan, source-clang]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.source-clang.result == 'success' || needs.source-clang.result == 'skipped') }}
+    needs: plan
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 350
     strategy:
@@ -65,15 +48,11 @@ jobs:
           sudo apt-get clean
           df -h /
 
-      - uses: actions/download-artifact@v4
-        if: matrix.toolchain == 'clang'
-        with:
-          name: llvm-src
-
-      - name: Extract source
+      - name: Download and extract LLVM source
         if: matrix.toolchain == 'clang'
         shell: bash
         run: |
+          curl -fsSL -o llvm-src.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ inputs.llvm_version }}/llvm-project-${{ inputs.llvm_version }}.src.tar.xz"
           mkdir llvm-src
           if [ "$RUNNER_OS" = "Windows" ]; then
             tar -xf llvm-src.tar.xz -C llvm-src --strip-components=1 --exclude='*/test/*' --exclude='*/unittests/*'
@@ -94,8 +73,26 @@ jobs:
         if: matrix.toolchain == 'clang' && matrix.kind == 'macos'
         run: brew install ninja
 
+      - name: Install tools (Windows ARM64)
+        if: matrix.id == 'windows-arm64'
+        shell: bash
+        run: python -m pip install ninja cmake
+
+      - name: Native tools environment
+        if: matrix.kind == 'windowsarm'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build native tools
+        if: matrix.kind == 'windowsarm'
+        shell: bash
+        run: python3 scripts/clang.py --stage tools --kind "${{ matrix.kind }}" --arch "${{ matrix.arch }}" --src llvm-src --work build --out install
+        env:
+          PYTHONUNBUFFERED: "1"
+
       - name: MSVC environment
-        if: matrix.toolchain == 'clang' && matrix.kind == 'windows'
+        if: matrix.toolchain == 'clang' && startsWith(matrix.kind, 'windows')
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
@@ -140,10 +137,13 @@ jobs:
 
   release:
     needs: build
-    if: inputs.release_tag != ''
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -151,12 +151,14 @@ jobs:
           python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
-          pattern: "{pkg,tree}-*"
+          pattern: pkg-*
           path: dist
           merge-multiple: true
-      - name: Manifest
-        run: python3 scripts/common.py manifest --dir dist --version "${{ inputs.llvm_version }}"
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.release_tag }}
-          files: dist/*
+      - name: Publish to the latest release
+        run: |
+          tag="${{ inputs.release_tag }}"
+          if [ -z "$tag" ]; then tag=$(gh release view --json tagName -q .tagName 2>/dev/null || true); fi
+          if [ -z "$tag" ]; then tag=v1.0.0; gh release create "$tag" --title "$tag" --notes ""; fi
+          gh release download "$tag" --pattern manifest.json --dir dist 2>/dev/null || true
+          python3 scripts/common.py manifest --dir dist
+          gh release upload "$tag" dist/*.tar.xz dist/manifest.json --clobber

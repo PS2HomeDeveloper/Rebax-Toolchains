@@ -69,6 +69,16 @@ jobs:
           if [ "${{ matrix.kind }}" = "linux32" ]; then sudo apt-get install -y gcc-multilib g++-multilib; fi
           if [ "${{ matrix.kind }}" = "linuxarm" ]; then sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf; fi
 
+      - name: Install llvm-mingw (Windows ARM cross)
+        if: matrix.kind == 'windowsarm'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+          curl -fsSL -o mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/20250709/llvm-mingw-20250709-ucrt-ubuntu-22.04-x86_64.tar.xz"
+          mkdir "$HOME/llvm-mingw"
+          tar -xf mingw.tar.xz -C "$HOME/llvm-mingw" --strip-components=1
+          echo "$HOME/llvm-mingw/bin" >> "$GITHUB_PATH"
+
       - name: Install tools (macOS)
         if: matrix.toolchain == 'clang' && matrix.kind == 'macos'
         run: brew install ninja
@@ -78,24 +88,8 @@ jobs:
         shell: bash
         run: python -m pip install ninja cmake
 
-      - name: Check ARM32 libraries
-        if: matrix.kind == 'windowsarm'
-        shell: cmd
-        run: |
-          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64_arm
-          if not exist "%WindowsSdkDir%Lib\%WindowsSDKVersion%um\arm\kernel32.lib" (echo ARM32 Windows SDK libraries are missing & exit /b 1)
-
-      - name: Build native tools
-        if: matrix.kind == 'windowsarm'
-        shell: cmd
-        run: |
-          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
-          python scripts/clang.py --stage tools --kind "${{ matrix.kind }}" --arch "${{ matrix.arch }}" --src llvm-src --work build --out install
-        env:
-          PYTHONUNBUFFERED: "1"
-
       - name: MSVC environment
-        if: matrix.toolchain == 'clang' && startsWith(matrix.kind, 'windows')
+        if: matrix.toolchain == 'clang' && matrix.kind == 'windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}

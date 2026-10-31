@@ -17,6 +17,13 @@ TOOLCHAINS = {
         {"id": "macos-x86_64", "runner": "macos-15-intel", "kind": "macos", "arch": "x86_64"},
         {"id": "macos-arm64", "runner": "macos-15", "kind": "macos", "arch": "arm64"},
     ],
+    "gcc-ps2": [
+        {"id": "linux-x86_64", "runner": "ubuntu-24.04", "kind": "linux", "arch": "x86_64"},
+        {"id": "linux-arm64", "runner": "ubuntu-24.04-arm", "kind": "linux", "arch": "arm64"},
+        {"id": "macos-x86_64", "runner": "macos-15-intel", "kind": "macos", "arch": "x86_64"},
+        {"id": "macos-arm64", "runner": "macos-15", "kind": "macos", "arch": "arm64"},
+        {"id": "windows-x86_64", "runner": "windows-2022", "kind": "windows", "arch": "x86"},
+    ],
 }
 
 

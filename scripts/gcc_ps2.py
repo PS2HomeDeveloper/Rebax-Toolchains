@@ -1,4 +1,4 @@
-import argparse, os, shutil, subprocess, sys
+import argparse, glob, os, shutil, subprocess, sys
 
 REPOS = [
     ("dvp", "https://github.com/ps2dev/ps2toolchain-dvp.git"),
@@ -7,6 +7,7 @@ REPOS = [
 ]
 REF = "main"
 PRUNE = ["share/man", "share/info", "share/locale"]
+PRUNE_GLOBS = ["lib/gcc/*/*/plugin"]
 
 
 def run(cmd, cwd=None, env=None):
@@ -28,6 +29,17 @@ def read_pins(folder):
                     if "_REPO_URL=" in line or "_DEFAULT_REPO_REF=" in line:
                         pins.append(line.strip())
     return pins
+
+
+def prune(ps2dev):
+    for name, _ in REPOS:
+        paths = [os.path.join(ps2dev, name, *rel.split("/")) for rel in PRUNE]
+        for pattern in PRUNE_GLOBS:
+            paths += glob.glob(os.path.join(ps2dev, name, *pattern.split("/")))
+        for path in paths:
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+                print("removed " + path)
 
 
 def build(out, work):
@@ -52,12 +64,7 @@ def build(out, work):
         source.extend("  " + pin for pin in read_pins(folder))
         run(["bash", "./toolchain.sh"], cwd=folder, env=env)
 
-    for name, _ in REPOS:
-        for rel in PRUNE:
-            path = os.path.join(ps2dev, name, *rel.split("/"))
-            if os.path.isdir(path):
-                shutil.rmtree(path)
-                print("removed " + path)
+    prune(ps2dev)
 
     with open(os.path.join(ps2dev, "SOURCE.txt"), "w") as f:
         f.write("\n".join(source) + "\n")

@@ -76,7 +76,7 @@ PRUNE_FILES_WINDOWS = ["lld"]
 PRUNE_HEADER_DIRS = ["cuda_wrappers", "llvm_libc_wrappers", "llvm_offload_wrappers",
                      "openmp_wrappers", "ppc_wrappers", "zos_wrappers"]
 PRUNE_HEADER_GLOBS = ["__clang_cuda_*", "__clang_hip_*", "altivec.h", "riscv_*.h", "wasm_simd128.h",
-                      "hvx_*.h", "hexagon_*.h", "msa.h", "vecintrin.h", "htmintrin.h", "htmxlintrin.h", "ppc_*.h"]
+                      "hvx_*.h", "hexagon_*.h", "msa.h", "amdgpuintrin.h", "nvptxintrin.h", "gpuintrin.h", "vecintrin.h", "htmintrin.h", "htmxlintrin.h", "ppc_*.h"]
 
 
 def remove(path):

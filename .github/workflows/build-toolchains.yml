@@ -125,7 +125,7 @@ jobs:
             base-devel git make texinfo flex bison patch binutils mpc-devel tar wget curl
             autotools gettext gettext-devel python
             mingw-w64-x86_64-readline mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-make mingw-w64-x86_64-libogg mingw-w64-x86_64-libgnurx
+            mingw-w64-x86_64-make mingw-w64-x86_64-libogg mingw-w64-x86_64-libsystre
           update: true
 
       - name: Build GCC PS2 (Windows)

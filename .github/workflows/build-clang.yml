@@ -66,6 +66,15 @@ jobs:
           fi
           rm llvm-src.tar.xz
 
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/lib/node_modules /usr/share/swift /opt/microsoft /opt/az /usr/local/share/powershell
+          sudo docker image prune --all --force > /dev/null 2>&1 || true
+          sudo apt-get clean
+          df -h /
+
       - name: Install tools (Linux)
         if: startsWith(matrix.kind, 'linux') || matrix.kind == 'android'
         run: |

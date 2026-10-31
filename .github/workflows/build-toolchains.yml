@@ -101,6 +101,19 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
 
+      - name: Install Android NDK (GCC PS2)
+        if: matrix.toolchain == 'gcc-ps2' && matrix.kind == 'android'
+        env:
+          NDK_VERSION: 27.3.13750724
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" "ndk;$NDK_VERSION" > /dev/null
+          echo "NDK_DIR=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Build GCC PS2 (Android)
+        if: matrix.toolchain == 'gcc-ps2' && matrix.kind == 'android'
+        run: |
+          docker run --rm -e DEBIAN_FRONTEND=noninteractive -e PYTHONUNBUFFERED=1 -e ANDROID_NDK_HOME=/ndk -v "$NDK_DIR:/ndk:ro" -v "$PWD:/w" -w /w ubuntu:20.04 bash -c 'apt-get -y update && apt-get -y install texinfo bison flex gettext autopoint autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev g++ gcc git libgsl-dev make patch zlib1g-dev wget curl ca-certificates gpg unzip python3 && (curl -LsSf https://apt.kitware.com/kitware-archive.sh | sh) && apt-get -y install cmake && python3 scripts/gcc_ps2_android.py --arch "${{ matrix.arch }}" --out install'
+
       - name: Build GCC PS2 (Linux)
         if: matrix.toolchain == 'gcc-ps2' && matrix.kind == 'linux'
         run: |

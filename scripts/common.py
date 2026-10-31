@@ -13,7 +13,7 @@ TOOLCHAINS = {
         {"id": "windows-x86_64", "runner": "windows-2022", "kind": "windows", "arch": "x64"},
         {"id": "windows-x86", "runner": "windows-2022", "kind": "windows", "arch": "x86"},
         {"id": "windows-arm64", "runner": "windows-11-arm", "kind": "windows", "arch": "arm64"},
-        {"id": "windows-arm", "runner": "windows-2022", "kind": "windowsarm", "arch": "amd64_arm"},
+        {"id": "windows-arm", "runner": "ubuntu-24.04", "kind": "windowsarm", "arch": "arm"},
         {"id": "macos-x86_64", "runner": "macos-15-intel", "kind": "macos", "arch": "x86_64"},
         {"id": "macos-arm64", "runner": "macos-15", "kind": "macos", "arch": "arm64"},
     ],

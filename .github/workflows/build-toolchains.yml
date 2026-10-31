@@ -78,16 +78,19 @@ jobs:
         shell: bash
         run: python -m pip install ninja cmake
 
-      - name: Native tools environment
+      - name: Check ARM32 libraries
         if: matrix.kind == 'windowsarm'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
+        shell: cmd
+        run: |
+          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64_arm
+          if not exist "%WindowsSdkDir%Lib\%WindowsSDKVersion%um\arm\kernel32.lib" (echo ARM32 Windows SDK libraries are missing & exit /b 1)
 
       - name: Build native tools
         if: matrix.kind == 'windowsarm'
-        shell: bash
-        run: python3 scripts/clang.py --stage tools --kind "${{ matrix.kind }}" --arch "${{ matrix.arch }}" --src llvm-src --work build --out install
+        shell: cmd
+        run: |
+          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          python scripts/clang.py --stage tools --kind "${{ matrix.kind }}" --arch "${{ matrix.arch }}" --src llvm-src --work build --out install
         env:
           PYTHONUNBUFFERED: "1"
 
@@ -125,15 +128,11 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: tree-*
-          path: trees
-          merge-multiple: true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact/merge@v4
         with:
           name: trees-all
-          path: trees/*
+          pattern: tree-*
+          delete-merged: true
 
   release:
     needs: build

@@ -1,4 +1,4 @@
-import argparse, hashlib, json, lzma, os, subprocess, sys, tarfile
+import argparse, hashlib, json, lzma, os, shutil, subprocess, sys, tarfile
 
 TOOLCHAINS = {
     "clang": [
@@ -76,7 +76,19 @@ def sha256(path):
     return h.hexdigest()
 
 
+def break_hardlinks(root):
+    for base, _, files in os.walk(root):
+        for fn in files:
+            path = os.path.join(base, fn)
+            if os.path.islink(path) or not os.path.isfile(path) or os.stat(path).st_nlink < 2:
+                continue
+            tmp = path + ".unlink-tmp"
+            shutil.copy2(path, tmp)
+            os.replace(tmp, path)
+
+
 def pack(root, top, name, dest):
+    break_hardlinks(root)
     os.makedirs(dest, exist_ok=True)
     archive = os.path.join(dest, name + ".tar.xz")
     with tarfile.open(archive, "w:xz", format=tarfile.GNU_FORMAT, preset=9 | lzma.PRESET_EXTREME) as tf:

@@ -42,6 +42,38 @@ def prune(ps2dev):
                 print("removed " + path)
 
 
+EE_TRIPLE = "mips64r5900el-ps2-elf"
+KEEP_LIB = ("libstdc++", "libsupc++", "ldscripts")
+
+
+def remove_path(path):
+    if os.path.isdir(path) and not os.path.islink(path):
+        shutil.rmtree(path)
+    else:
+        os.remove(path)
+
+
+def finish(ps2dev):
+    top_bin = os.path.join(ps2dev, "bin")
+    if os.path.isdir(top_bin):
+        dvp_bin = os.path.join(ps2dev, "dvp", "bin")
+        os.makedirs(dvp_bin, exist_ok=True)
+        for name in os.listdir(top_bin):
+            shutil.move(os.path.join(top_bin, name), os.path.join(dvp_bin, name))
+        os.rmdir(top_bin)
+    ee = os.path.join(ps2dev, "ee", EE_TRIPLE)
+    inc = os.path.join(ee, "include")
+    if os.path.isdir(inc):
+        for name in os.listdir(inc):
+            if name != "c++":
+                remove_path(os.path.join(inc, name))
+    lib = os.path.join(ee, "lib")
+    if os.path.isdir(lib):
+        for name in os.listdir(lib):
+            if not name.startswith(KEEP_LIB):
+                remove_path(os.path.join(lib, name))
+
+
 def build(out, work):
     ps2dev = os.path.abspath(out)
     work = os.path.abspath(work)
@@ -65,6 +97,7 @@ def build(out, work):
         run(["bash", "./toolchain.sh"], cwd=folder, env=env)
 
     prune(ps2dev)
+    finish(ps2dev)
 
     with open(os.path.join(ps2dev, "SOURCE.txt"), "w") as f:
         f.write("\n".join(source) + "\n")

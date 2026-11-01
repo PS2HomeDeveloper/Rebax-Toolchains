@@ -31,6 +31,9 @@ CACHE_VARS = {"ac_cv_header_fcntl_h": "yes", "ac_cv_func_open": "yes", "ac_cv_fu
               "ac_cv_func_getcwd": "yes", "ac_cv_func_psignal": "yes", "ac_cv_func_strsignal": "yes"}
 
 
+WINDOWS_BUILD = False
+
+
 class Ctx:
     pass
 
@@ -113,8 +116,8 @@ def make_profile(host_id):
                 "cxx": "%s/%s-clang++ -static" % (b, t), "ar": b + "/llvm-ar", "ld": "%s/%s-ld" % (b, t),
                 "ranlib": b + "/llvm-ranlib", "nm": b + "/llvm-nm", "strip": b + "/llvm-strip",
                 "readelf": b + "/llvm-readelf", "cflags": WINDOWS_CFLAGS, "cxxflags": "-g -O2 -fno-char8_t",
-                "cache": {}, "gcc_args": [], "binutils_args": ["--disable-gprofng"], "pie": False,
-                "needed": set(), "path": b, "skip_dvp_tools": True, "gmp_args": ["--disable-assembly"],
+                "cache": {}, "gcc_args": ["--disable-fixincludes"], "binutils_args": ["--disable-gprofng"],
+                "pie": False, "needed": set(), "path": b, "gmp_args": ["--disable-assembly"],
                 "cmake_args": ["-DCMAKE_SYSTEM_NAME=Windows"], "note": "llvm-mingw"}
     abi = ANDROID_ABIS[host_id[len("android-"):]]
     ndk = os.environ.get("ANDROID_NDK_HOME")
@@ -149,17 +152,46 @@ def configure(src, build, args, env):
             with open(log, errors="replace") as f:
                 print("".join(f.readlines()[-120:]))
         raise
+    disable_fixincludes(build)
+
+
+def disable_fixincludes(build):
+    if not WINDOWS_BUILD:
+        return
+    path = os.path.join(build, "Makefile")
+    if not os.path.isfile(path):
+        return
+    with open(path, errors="replace") as f:
+        text = f.read()
+    new = re.sub(r"(?m)^(maybe-[a-z-]*-fixincludes:).*$", r"\1", text)
+    if new != text:
+        with open(path, "w") as f:
+            f.write(new)
+        print("fixincludes disabled in " + path)
+
+
+def summarize(text):
+    pattern = re.compile(r"\berror\b|\*\*\*|fatal|undefined reference|cannot find|No such file", re.I)
+    lines = [l.rstrip() for l in text.splitlines() if pattern.search(l) and "warning" not in l.lower()]
+    print("=== ERROR SUMMARY ===")
+    print("\n".join(lines[:60]))
+    print("=== END ERROR SUMMARY ===", flush=True)
 
 
 def make(build, targets, env, extra=None, retry_single=False):
     cmd = ["make", "--quiet", "-j", jobs()] + targets + (extra or [])
-    try:
-        run(cmd, cwd=build, env=env)
-    except subprocess.CalledProcessError:
-        if not retry_single:
-            raise
-        print("=== make failed: retrying with one job ===")
-        run(["make", "--quiet", "-j", "1"] + targets + (extra or []), cwd=build, env=env)
+    rc, text = run_logged(cmd, build, env)
+    if rc == 0:
+        return
+    if not retry_single:
+        summarize(text)
+        raise subprocess.CalledProcessError(rc, cmd)
+    print("=== make failed: retrying with one job ===")
+    cmd = ["make", "--quiet", "-j", "1"] + targets + (extra or [])
+    rc, text = run_logged(cmd, build, env)
+    if rc != 0:
+        summarize(text)
+        raise subprocess.CalledProcessError(rc, cmd)
 
 
 def patch_libiberty(src, strict):
@@ -187,8 +219,23 @@ def patch_libiberty(src, strict):
             f.write("typedef int libiberty_getcwd_unused_t;\n")
 
 
+UTF8_RULES = """utf8rc-mingw32.o :
+\t$(COMPILER) -x c -c /dev/null -o $@
+
+sym-mingw32.o : $(srcdir)/config/i386/sym-mingw32.cc
+\t$(COMPILER) -c $<
+
+utf8-mingw32.o : sym-mingw32.o
+\tcp sym-mingw32.o $@
+"""
+
+
 def patch_gcc_source(src):
     patch_libiberty(src, True)
+    path = os.path.join(src, "gcc", "config", "i386", "x-mingw32-utf8")
+    if os.path.isfile(path):
+        with open(path, "w") as f:
+            f.write(UTF8_RULES)
 
 
 def build_deps(c):
@@ -438,12 +485,13 @@ def build_iop(c):
 
 
 def cmake_build(c, src, extra):
+    prefix = os.path.join(c.ps2dev, "dvp")
     env = host_env(c)
     for var in ("CC", "CXX"):
         for flag in (" -Wl,--no-relax", " -static-libstdc++", " -static-libgcc", " -static"):
             env[var] = env[var].replace(flag, "")
     build = os.path.join(src, "build")
-    run(["cmake", "-S", src, "-B", build, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_INSTALL_PREFIX=" + c.ps2dev,
+    run(["cmake", "-S", src, "-B", build, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_INSTALL_PREFIX=" + prefix,
          "-DBUILD_TESTING=OFF"] + c.p.get("cmake_args", []) + extra, env=env)
     run(["cmake", "--build", build, "-j", jobs()], env=env)
     run(["cmake", "--install", build], env=env)
@@ -464,8 +512,16 @@ def build_dvp(c):
                                        "--disable-build-warnings", "--disable-gdb", "--host=" + c.p["host"]], env)
     make(build, [], env, extra=["CFLAGS=" + env["CFLAGS"]], retry_single=True)
     make(build, ["install"], env, extra=["CFLAGS=" + env["CFLAGS"]])
-    if c.p.get("skip_dvp_tools"):
-        print("skipping masp and openvcl (they need POSIX regex)")
+    if c.p["kind"] == "windows":
+        stub = fresh(os.path.join(c.work, "regex-stub"))
+        os.makedirs(os.path.join(stub, "include"))
+        os.makedirs(os.path.join(stub, "lib"))
+        with open(os.path.join(stub, "include", "regex.h"), "w") as f:
+            f.write("/* masp only includes this header */\n")
+        run([c.p["ar"], "rc", os.path.join(stub, "lib", "libgnurx.a")])
+        cmake_build(c, src["MASP"], ["-DCMAKE_C_FLAGS=-I%s/include" % stub,
+                                     "-DCMAKE_EXE_LINKER_FLAGS=-static -L%s/lib" % stub])
+        cmake_build(c, src["OPENVCL"], ["-DCMAKE_EXE_LINKER_FLAGS=-static"])
         return
     cmake_build(c, src["MASP"], [])
     cmake_build(c, src["OPENVCL"], ["-DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++ -static-libgcc"])
@@ -554,8 +610,10 @@ def strip_and_check(c):
 
 
 def build(host_id, out, work):
+    global WINDOWS_BUILD
     c = Ctx()
     c.p = make_profile(host_id)
+    WINDOWS_BUILD = c.p["kind"] == "windows"
     c.ps2dev = os.path.abspath(out)
     c.work = os.path.abspath(work)
     c.native = os.path.abspath("native-ps2dev")
@@ -579,6 +637,7 @@ def build(host_id, out, work):
     build_iop(c)
     build_ee(c)
     gcc_ps2.prune(c.ps2dev)
+    gcc_ps2.finish(c.ps2dev)
     strip_and_check(c)
     with open(os.path.join(c.ps2dev, "SOURCE.txt"), "w") as f:
         f.write("host %s %s\n" % (host_id, c.p.get("note", "")))

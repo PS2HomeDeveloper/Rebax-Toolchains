@@ -420,6 +420,8 @@ def build_iop(c):
 
 def cmake_build(c, src, extra):
     env = host_env(c)
+    env["CC"] = env["CC"].replace(" -Wl,--no-relax", "")
+    env["CXX"] = env["CXX"].replace(" -Wl,--no-relax", "")
     build = os.path.join(src, "build")
     run(["cmake", "-S", src, "-B", build, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_INSTALL_PREFIX=" + c.ps2dev,
          "-DBUILD_TESTING=OFF"] + extra, env=env)

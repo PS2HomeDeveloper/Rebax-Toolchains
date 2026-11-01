@@ -143,17 +143,18 @@ def make(build, targets, env, extra=None, retry_single=False):
         run(["make", "--quiet", "-j", "1"] + targets + (extra or []), cwd=build, env=env)
 
 
-def patch_gcc_source(src):
+def patch_libiberty(src, strict):
     path = os.path.join(src, "include", "libiberty.h")
-    with open(path) as f:
-        text = f.read()
     marker = "HAVE_DECL_BASENAME && !defined (__cplusplus)"
-    if marker not in text:
-        text = re.sub(r"(?m)^#if !HAVE_DECL_BASENAME[ \t]*$", "#if !HAVE_DECL_BASENAME && !defined (__cplusplus)", text)
-        with open(path, "w") as f:
-            f.write(text)
-    if marker not in text:
-        sys.exit("libiberty.h basename patch did not apply")
+    if os.path.isfile(path):
+        with open(path) as f:
+            text = f.read()
+        if marker not in text:
+            text = re.sub(r"(?m)^#if !HAVE_DECL_BASENAME[ \t]*$", "#if !HAVE_DECL_BASENAME && !defined (__cplusplus)", text)
+            with open(path, "w") as f:
+                f.write(text)
+        if strict and marker not in text:
+            sys.exit("libiberty.h basename patch did not apply")
     fib = os.path.join(src, "libiberty", "fibheap.c")
     if os.path.isfile(fib):
         with open(fib) as f:
@@ -165,6 +166,10 @@ def patch_gcc_source(src):
     if os.path.isfile(gc):
         with open(gc, "w") as f:
             f.write("typedef int libiberty_getcwd_unused_t;\n")
+
+
+def patch_gcc_source(src):
+    patch_libiberty(src, True)
 
 
 def build_deps(c):
@@ -201,8 +206,13 @@ def binutils_native(c, src, target, alias, sysroot):
     make(build, ["install-strip"], env)
 
 
+def binutils_flags(c):
+    return (c.p["cflags"] + " -Wno-implicit-function-declaration").strip()
+
+
 def binutils_host(c, src, target, alias, sysroot):
     env = host_env(c)
+    env["CFLAGS"] = binutils_flags(c)
     args = ["--quiet", "--prefix=%s/%s" % (c.ps2dev, alias), "--target=" + target]
     if sysroot:
         args.append("--with-sysroot=%s/%s/%s" % (c.ps2dev, alias, target))
@@ -279,6 +289,7 @@ def build_ee(c):
         src[key] = os.path.join(c.work, "ee-" + name)
         c.source.append("ee %s %s" % (name, clone(pins[pre + "_REPO_URL"], pins[pre + "_DEFAULT_REPO_REF"], src[key])))
     patch_gcc_source(src["GCC"])
+    patch_libiberty(src["BINUTILS"], False)
     binutils_native(c, src["BINUTILS"], EE, "ee", True)
     binutils_host(c, src["BINUTILS"], EE, "ee", True)
 
@@ -382,6 +393,7 @@ def build_iop(c):
         src[key] = os.path.join(c.work, "iop-" + name)
         c.source.append("iop %s %s" % (name, clone(pins[pre + "_REPO_URL"], pins[pre + "_DEFAULT_REPO_REF"], src[key])))
     patch_gcc_source(src["GCC"])
+    patch_libiberty(src["BINUTILS"], False)
     binutils_native(c, src["BINUTILS"], IOP, "iop", False)
     binutils_host(c, src["BINUTILS"], IOP, "iop", False)
 
@@ -422,13 +434,14 @@ def build_dvp(c):
         pre = "PS2TOOLCHAIN_DVP_" + key
         src[key] = os.path.join(c.work, "dvp-" + name)
         c.source.append("dvp %s %s" % (name, clone(pins[pre + "_REPO_URL"], pins[pre + "_DEFAULT_REPO_REF"], src[key])))
+    patch_libiberty(src["BINUTILS"], False)
     env = host_env(c)
-    env["CFLAGS"] = "-Wno-implicit-function-declaration"
+    env["CFLAGS"] = binutils_flags(c)
     build = fresh(os.path.join(src["BINUTILS"], "build-dvp"))
     configure(src["BINUTILS"], build, ["--quiet", "--prefix=%s/dvp" % c.ps2dev, "--target=" + DVP, "--disable-nls",
                                        "--disable-build-warnings", "--disable-gdb", "--host=" + c.p["host"]], env)
-    make(build, [], env, extra=["CFLAGS=-Wno-implicit-function-declaration"], retry_single=True)
-    make(build, ["install"], env, extra=["CFLAGS=-Wno-implicit-function-declaration"])
+    make(build, [], env, extra=["CFLAGS=" + env["CFLAGS"]], retry_single=True)
+    make(build, ["install"], env, extra=["CFLAGS=" + env["CFLAGS"]])
     cmake_build(c, src["MASP"], [])
     cmake_build(c, src["OPENVCL"], ["-DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++"])
 

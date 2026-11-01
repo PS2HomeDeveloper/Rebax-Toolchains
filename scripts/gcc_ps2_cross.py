@@ -420,8 +420,9 @@ def build_iop(c):
 
 def cmake_build(c, src, extra):
     env = host_env(c)
-    env["CC"] = env["CC"].replace(" -Wl,--no-relax", "")
-    env["CXX"] = env["CXX"].replace(" -Wl,--no-relax", "")
+    for var in ("CC", "CXX"):
+        for flag in (" -Wl,--no-relax", " -static-libstdc++", " -static-libgcc"):
+            env[var] = env[var].replace(flag, "")
     build = os.path.join(src, "build")
     run(["cmake", "-S", src, "-B", build, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_INSTALL_PREFIX=" + c.ps2dev,
          "-DBUILD_TESTING=OFF"] + extra, env=env)
@@ -445,7 +446,7 @@ def build_dvp(c):
     make(build, [], env, extra=["CFLAGS=" + env["CFLAGS"]], retry_single=True)
     make(build, ["install"], env, extra=["CFLAGS=" + env["CFLAGS"]])
     cmake_build(c, src["MASP"], [])
-    cmake_build(c, src["OPENVCL"], ["-DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++"])
+    cmake_build(c, src["OPENVCL"], ["-DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++ -static-libgcc"])
 
 
 def elf_info(path):

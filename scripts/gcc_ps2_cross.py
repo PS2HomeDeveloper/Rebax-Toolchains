@@ -233,6 +233,17 @@ utf8-mingw32.o : sym-mingw32.o
 
 def patch_gcc_source(src):
     patch_libiberty(src, True)
+    host = os.path.join(src, "gcc", "config.host")
+    if os.path.isfile(host):
+        with open(host) as f:
+            text = f.read()
+        marker = "\nhost_exeext=\n"
+        if marker not in text:
+            sys.exit("config.host exeext marker not found")
+        if "mingw_exeext_patch" not in text:
+            text = text.replace(marker, "\ncase ${host} in *-*-mingw*) host_exeext=.exe ;; *) host_exeext= ;; esac # mingw_exeext_patch\n", 1)
+            with open(host, "w") as f:
+                f.write(text)
     path = os.path.join(src, "gcc", "config", "i386", "x-mingw32-utf8")
     if os.path.isfile(path):
         with open(path, "w") as f:

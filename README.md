@@ -6,11 +6,10 @@ The repository contains compiler packages built for supported host platforms and
 
 ## Overview
 
-The repository provides three groups of compiler toolchains:
+The repository provides two types of compiler toolchains:
 
-- **Clang** — host-specific compiler toolchains for modern platforms, supporting cross-compilation for Windows, Linux, Android, macOS, and iOS.
-- **GCC for PlayStation 1** — cross-compilation toolchains for PlayStation 1 development.
-- **GCC for PlayStation 2** — cross-compilation toolchains for PlayStation 2 development.
+- **Clang** — host-specific compiler toolchains for modern platforms.
+- **GCC** — cross-compilation toolchains for PlayStation 1 and PlayStation 2.
 
 Each toolchain package is published as a compressed `.tar.xz` archive through GitHub Releases.
 

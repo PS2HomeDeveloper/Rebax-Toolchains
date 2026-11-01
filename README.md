@@ -26,13 +26,19 @@ Host platforms determine where the compiler runs.
 | Windows | arm, arm64, x86, x86_64 |
 | macOS | arm64, x86_64 |
 
-Actual availability depends on the published release assets.
-
 ### Target Platforms
 
-Target platforms determine the architecture or system for which the compiler generates output.
+Target platforms determine the systems for which the compiler generates output.
 
-Supported targets depend on the available toolchain packages and their corresponding SDKs.
+| Platform | Architectures |
+|---|---|
+| Android | arm64-v8a, armeabi-v7a, x86, x86_64 |
+| Linux | arm, arm64, x86, x86_64 |
+| Windows | arm, arm64, x86, x86_64 |
+| macOS | arm64, x86_64 |
+| iOS | arm64, simulator-x86_64 |
+| PlayStation 1 | — |
+| PlayStation 2 | — |
 
 ## Package Naming
 

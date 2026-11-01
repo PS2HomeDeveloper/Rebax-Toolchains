@@ -23,6 +23,8 @@ TOOLCHAINS = {
         {"id": "macos-x86_64", "runner": "macos-15-intel", "kind": "macos", "arch": "x86_64"},
         {"id": "macos-arm64", "runner": "macos-15", "kind": "macos", "arch": "arm64"},
         {"id": "windows-x86_64", "runner": "windows-2022", "kind": "windows", "arch": "x86_64"},
+        {"id": "linux-x86", "runner": "ubuntu-24.04", "kind": "linux32", "arch": "x86"},
+        {"id": "linux-arm", "runner": "ubuntu-24.04", "kind": "linuxarm", "arch": "arm"},
         {"id": "android-arm64-v8a", "runner": "ubuntu-24.04", "kind": "android", "arch": "arm64-v8a"},
         {"id": "android-armeabi-v7a", "runner": "ubuntu-24.04", "kind": "android", "arch": "armeabi-v7a"},
         {"id": "android-x86", "runner": "ubuntu-24.04", "kind": "android", "arch": "x86"},

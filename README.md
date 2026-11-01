@@ -39,12 +39,3 @@ Target platforms determine the systems for which the compiler generates output.
 | iOS | arm64, simulator-x86_64 |
 | PlayStation 1 | — |
 | PlayStation 2 | — |
-
-## Package Naming
-
-Compiler packages follow consistent naming conventions.
-
-**Clang:**
-
-```text
-rebax-clang-<host>-<arch>.tar.xz

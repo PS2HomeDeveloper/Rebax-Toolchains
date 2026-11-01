@@ -152,18 +152,19 @@ def configure(src, build, args, env):
             with open(log, errors="replace") as f:
                 print("".join(f.readlines()[-120:]))
         raise
-    disable_fixincludes(build)
+    if env.get("CONFIGURE_HOST"):
+        disable_fixincludes(build, env)
 
 
-def disable_fixincludes(build):
-    if not WINDOWS_BUILD:
+def disable_fixincludes(build, env):
+    if not WINDOWS_BUILD or not env.get("CONFIGURE_HOST"):
         return
     path = os.path.join(build, "Makefile")
     if not os.path.isfile(path):
         return
     with open(path, errors="replace") as f:
         text = f.read()
-    new = re.sub(r"(?m)^(maybe-[a-z-]*-fixincludes:).*$", r"\1", text)
+    new = re.sub(r"(?m)^(maybe-(?:all|install|install-strip)-fixincludes:).*$", r"\1", text)
     if new != text:
         with open(path, "w") as f:
             f.write(new)

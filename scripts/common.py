@@ -76,23 +76,21 @@ def sha256(path):
     return h.hexdigest()
 
 
-def break_hardlinks(root):
-    for base, _, files in os.walk(root):
-        for fn in files:
-            path = os.path.join(base, fn)
-            if os.path.islink(path) or not os.path.isfile(path) or os.stat(path).st_nlink < 2:
-                continue
-            tmp = path + ".unlink-tmp"
-            shutil.copy2(path, tmp)
-            os.replace(tmp, path)
+def add_flat(tf, root, top):
+    tf.add(root, arcname=top, recursive=False)
+    for base, dirs, files in os.walk(root):
+        dirs.sort()
+        for name in sorted(dirs + files):
+            path = os.path.join(base, name)
+            tf.inodes.clear()
+            tf.add(path, arcname=os.path.join(top, os.path.relpath(path, root)), recursive=False)
 
 
 def pack(root, top, name, dest):
-    break_hardlinks(root)
     os.makedirs(dest, exist_ok=True)
     archive = os.path.join(dest, name + ".tar.xz")
     with tarfile.open(archive, "w:xz", format=tarfile.GNU_FORMAT, preset=9 | lzma.PRESET_EXTREME) as tf:
-        tf.add(root, arcname=top)
+        add_flat(tf, root, top)
     with open(os.path.join(dest, name + ".tree.txt"), "w", encoding="utf-8") as f:
         f.write(list_tree(root, top))
     digest = sha256(archive)

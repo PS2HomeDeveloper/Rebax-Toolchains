@@ -122,7 +122,7 @@ jobs:
       - name: Build GCC PS2 (Linux x86 32-bit)
         if: matrix.toolchain == 'gcc-ps2' && matrix.kind == 'linux32'
         run: |
-          docker run --rm --platform linux/386 -e DEBIAN_FRONTEND=noninteractive -e PYTHONUNBUFFERED=1 -v "$PWD:/w" -w /w debian:bullseye bash -c 'apt-get -y update && apt-get -y install texinfo bison flex gettext autopoint autoconf automake libgmp3-dev libmpfr-dev libmpc-dev cmake g++ gcc git libgsl-dev make patch zlib1g-dev wget curl ca-certificates python3 && python3 scripts/gcc_ps2.py --out install'
+          docker run --rm --platform linux/386 -e DEBIAN_FRONTEND=noninteractive -e PYTHONUNBUFFERED=1 -v "$PWD:/w" -w /w debian:bookworm bash -c 'apt-get -y update && apt-get -y install texinfo bison flex gettext autopoint autoconf automake libgmp3-dev libmpfr-dev libmpc-dev cmake g++ gcc git libgsl-dev make patch zlib1g-dev wget curl ca-certificates python3 && python3 scripts/gcc_ps2.py --out install'
 
       - name: Build GCC PS2 (Linux ARM 32-bit)
         if: matrix.toolchain == 'gcc-ps2' && matrix.kind == 'linuxarm'

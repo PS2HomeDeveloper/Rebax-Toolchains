@@ -8,7 +8,13 @@ ANDROID_ABIS = {
     "x86_64": {"clang": "x86_64-linux-android", "host": "x86_64-linux-android", "api": "21", "machine": 0x3E},
     "x86": {"clang": "i686-linux-android", "host": "i686-linux-android", "api": "24", "machine": 0x03},
 }
-HOST_IDS = ["android-" + name for name in ANDROID_ABIS] + ["linux-arm"]
+WINDOWS_HOSTS = {
+    "windows-x86": ("i686-w64-mingw32", 0x14C),
+    "windows-arm64": ("aarch64-w64-mingw32", 0xAA64),
+    "windows-arm": ("armv7-w64-mingw32", 0x1C4),
+}
+WINDOWS_CFLAGS = "-O2 -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-function-pointer-types"
+HOST_IDS = ["android-" + name for name in ANDROID_ABIS] + ["linux-arm"] + sorted(WINDOWS_HOSTS)
 LINUX_NEEDED = {"libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1", "libutil.so.1",
                 "ld-linux-armhf.so.3"}
 EE = "mips64r5900el-ps2-elf"
@@ -97,6 +103,19 @@ def make_profile(host_id):
                 "ranlib": t + "-ranlib", "nm": t + "-nm", "strip": t + "-strip", "readelf": t + "-readelf",
                 "cflags": "-O2", "cxxflags": "-g -O2 -fno-char8_t", "cache": {}, "gcc_args": [],
                 "binutils_args": ["--disable-gprofng"], "pie": False, "needed": LINUX_NEEDED}
+    if host_id in WINDOWS_HOSTS:
+        t, machine = WINDOWS_HOSTS[host_id]
+        root = os.environ.get("LLVM_MINGW")
+        if not root:
+            sys.exit("LLVM_MINGW is not set")
+        b = os.path.join(root, "bin")
+        return {"kind": "windows", "host": t, "machine": machine, "cc": "%s/%s-clang -static" % (b, t),
+                "cxx": "%s/%s-clang++ -static" % (b, t), "ar": b + "/llvm-ar", "ld": "%s/%s-ld" % (b, t),
+                "ranlib": b + "/llvm-ranlib", "nm": b + "/llvm-nm", "strip": b + "/llvm-strip",
+                "readelf": b + "/llvm-readelf", "cflags": WINDOWS_CFLAGS, "cxxflags": "-g -O2 -fno-char8_t",
+                "cache": {}, "gcc_args": [], "binutils_args": ["--disable-gprofng"], "pie": False,
+                "needed": set(), "path": b, "skip_dvp_tools": True, "gmp_args": ["--disable-assembly"],
+                "cmake_args": ["-DCMAKE_SYSTEM_NAME=Windows"], "note": "llvm-mingw"}
     abi = ANDROID_ABIS[host_id[len("android-"):]]
     ndk = os.environ.get("ANDROID_NDK_HOME")
     if not ndk:
@@ -189,7 +208,7 @@ def build_deps(c):
         src = os.path.join(c.work, "%s-%s" % (name, ver))
         build = os.path.join(c.work, name + "-build")
         configure(src, build, ["--host=" + c.p["host"], "--prefix=" + prefix, "--disable-shared",
-                               "--enable-static", "--with-pic"] + extra, env)
+                               "--enable-static", "--with-pic"] + c.p.get("gmp_args", []) + extra, env)
         make(build, [], env)
         make(build, ["install"], env)
 
@@ -421,11 +440,11 @@ def build_iop(c):
 def cmake_build(c, src, extra):
     env = host_env(c)
     for var in ("CC", "CXX"):
-        for flag in (" -Wl,--no-relax", " -static-libstdc++", " -static-libgcc"):
+        for flag in (" -Wl,--no-relax", " -static-libstdc++", " -static-libgcc", " -static"):
             env[var] = env[var].replace(flag, "")
     build = os.path.join(src, "build")
     run(["cmake", "-S", src, "-B", build, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_INSTALL_PREFIX=" + c.ps2dev,
-         "-DBUILD_TESTING=OFF"] + extra, env=env)
+         "-DBUILD_TESTING=OFF"] + c.p.get("cmake_args", []) + extra, env=env)
     run(["cmake", "--build", build, "-j", jobs()], env=env)
     run(["cmake", "--install", build], env=env)
 
@@ -445,6 +464,9 @@ def build_dvp(c):
                                        "--disable-build-warnings", "--disable-gdb", "--host=" + c.p["host"]], env)
     make(build, [], env, extra=["CFLAGS=" + env["CFLAGS"]], retry_single=True)
     make(build, ["install"], env, extra=["CFLAGS=" + env["CFLAGS"]])
+    if c.p.get("skip_dvp_tools"):
+        print("skipping masp and openvcl (they need POSIX regex)")
+        return
     cmake_build(c, src["MASP"], [])
     cmake_build(c, src["OPENVCL"], ["-DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++ -static-libgcc"])
 
@@ -457,7 +479,47 @@ def elf_info(path):
     return int.from_bytes(head[16:18], "little"), int.from_bytes(head[18:20], "little")
 
 
+def pe_machine(path):
+    with open(path, "rb") as f:
+        data = f.read(4096)
+    if data[:2] != b"MZ" or len(data) < 64:
+        return None
+    off = int.from_bytes(data[60:64], "little")
+    if data[off:off + 4] != b"PE\0\0":
+        return None
+    return int.from_bytes(data[off + 4:off + 6], "little")
+
+
+def strip_and_check_windows(c):
+    total, bad = 0, []
+    for root, _, files in os.walk(c.ps2dev):
+        for name in files:
+            if not name.endswith((".exe", ".dll")):
+                continue
+            path = os.path.join(root, name)
+            if os.path.islink(path):
+                continue
+            machine = pe_machine(path)
+            if machine is None:
+                continue
+            if machine != c.p["machine"]:
+                bad.append("wrong machine (0x%x): %s" % (machine, path))
+                continue
+            subprocess.run([c.p["strip"], "--strip-all", path], check=False)
+            total += 1
+    print("host PE files checked: %d" % total)
+    if total == 0:
+        sys.exit("no host binaries found")
+    if bad:
+        print("\n".join(bad[:40]))
+        sys.exit("PACKAGE CHECK FAILED")
+    print("PACKAGE CHECK OK")
+
+
 def strip_and_check(c):
+    if c.p["kind"] == "windows":
+        strip_and_check_windows(c)
+        return
     strip = c.p["strip"]
     readelf = c.p["readelf"]
     total, bad = 0, []

@@ -9,6 +9,7 @@ ANDROID_ABIS = {
     "x86": {"clang": "i686-linux-android", "host": "i686-linux-android", "api": "24", "machine": 0x03},
 }
 WINDOWS_HOSTS = {
+    "windows-x86_64": ("x86_64-w64-mingw32", 0x8664),
     "windows-x86": ("i686-w64-mingw32", 0x14C),
     "windows-arm64": ("aarch64-w64-mingw32", 0xAA64),
     "windows-arm": ("armv7-w64-mingw32", 0x1C4),
@@ -250,7 +251,7 @@ def patch_gcc_source(src):
             f.write(UTF8_RULES)
 
 
-def build_deps(c):
+def build_deps(c, extra_args=None):
     prefix = c.deps
     os.makedirs(prefix, exist_ok=True)
     env = host_env(c)
@@ -266,8 +267,10 @@ def build_deps(c):
         run(["tar", "-xf", archive, "-C", c.work])
         src = os.path.join(c.work, "%s-%s" % (name, ver))
         build = os.path.join(c.work, name + "-build")
-        configure(src, build, ["--host=" + c.p["host"], "--prefix=" + prefix, "--disable-shared",
-                               "--enable-static", "--with-pic"] + c.p.get("gmp_args", []) + extra, env)
+        host_args = ["--host=" + c.p["host"]] if c.p["host"] else []
+        configure(src, build, host_args + ["--prefix=" + prefix, "--disable-shared",
+                               "--enable-static", "--with-pic"] + c.p.get("gmp_args", []) + extra +
+                  (extra_args or []), env)
         make(build, [], env)
         make(build, ["install"], env)
 

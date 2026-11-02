@@ -1,0 +1,67 @@
+name: Test clang packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      sdk_repo:
+        description: Repository that holds the SDK releases
+        default: PS2HomeDeveloper/Rebax-SDKs
+
+jobs:
+  test:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            host: linux-x86_64
+            targets: linux-x86_64 linux-x86 linux-arm64 linux-arm android-arm64-v8a android-armeabi-v7a android-x86 android-x86_64 windows-x86_64 windows-x86 windows-arm64 windows-arm
+            run: linux-x86_64 linux-x86 linux-arm64 linux-arm
+          - runner: ubuntu-24.04-arm
+            host: linux-arm64
+            targets: linux-arm64
+            run: linux-arm64
+          - runner: windows-2022
+            host: windows-x86_64
+            targets: windows-x86_64 windows-x86
+            run: windows-x86_64 windows-x86
+          - runner: windows-11-arm
+            host: windows-arm64
+            targets: windows-arm64
+            run: windows-arm64
+          - runner: macos-15
+            host: macos-arm64
+            targets: macos-arm64 macos-x86_64 ios-arm64 ios-simulator-x86_64
+            run: macos-arm64
+          - runner: macos-15-intel
+            host: macos-x86_64
+            targets: macos-x86_64
+            run: macos-x86_64
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install QEMU user emulation
+        if: matrix.host == 'linux-x86_64'
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+
+      - name: Download packages
+        shell: bash
+        run: |
+          mkdir -p pkgs/tc pkgs/sdk
+          gh release download --repo "${{ github.repository }}" --pattern "rebax-clang-${{ matrix.host }}.tar.xz" --dir pkgs/tc
+          for t in ${{ matrix.targets }}; do
+            gh release download --repo "${{ inputs.sdk_repo }}" --pattern "rebax-sdk-$t.tar.xz" --dir pkgs/sdk
+          done
+          ls -la pkgs/tc pkgs/sdk
+
+      - name: Run tests
+        shell: bash
+        run: python scripts/smoke.py --toolchain "pkgs/tc/rebax-clang-${{ matrix.host }}.tar.xz" --sdks pkgs/sdk --targets ${{ matrix.targets }} --run ${{ matrix.run }}

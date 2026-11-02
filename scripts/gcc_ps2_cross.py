@@ -56,6 +56,23 @@ def run_logged(cmd, cwd, env):
     return proc.returncode, "".join(lines)
 
 
+GNU_MIRRORS = ["https://ftpmirror.gnu.org/gnu/", "https://ftp.gnu.org/gnu/", "https://mirrors.kernel.org/gnu/",
+               "https://mirror.us-midwest-1.nexcess.net/gnu/"]
+
+
+def download(rel, dest):
+    last = None
+    for attempt in range(3):
+        for base in GNU_MIRRORS:
+            try:
+                run(["curl", "-fsSL", "--connect-timeout", "30", "--max-time", "900", "--retry", "2",
+                     "-o", dest, base + rel])
+                return
+            except subprocess.CalledProcessError as e:
+                last = e
+    raise last
+
+
 def jobs():
     return str(os.cpu_count() or 2)
 
@@ -257,13 +274,13 @@ def build_deps(c, extra_args=None):
     env = host_env(c)
     env["CFLAGS"] = "-O2"
     items = [
-        ("gmp", GMP, "https://ftp.gnu.org/gnu/gmp/gmp-%s.tar.xz", []),
-        ("mpfr", MPFR, "https://ftp.gnu.org/gnu/mpfr/mpfr-%s.tar.xz", ["--with-gmp=" + prefix]),
-        ("mpc", MPC, "https://ftp.gnu.org/gnu/mpc/mpc-%s.tar.gz", ["--with-gmp=" + prefix, "--with-mpfr=" + prefix]),
+        ("gmp", GMP, "gmp/gmp-%s.tar.xz", []),
+        ("mpfr", MPFR, "mpfr/mpfr-%s.tar.xz", ["--with-gmp=" + prefix]),
+        ("mpc", MPC, "mpc/mpc-%s.tar.gz", ["--with-gmp=" + prefix, "--with-mpfr=" + prefix]),
     ]
     for name, ver, url, extra in items:
         archive = os.path.join(c.work, name + ".tar")
-        run(["curl", "-fsSL", "--retry", "3", "-o", archive, url % ver])
+        download(url % ver, archive)
         run(["tar", "-xf", archive, "-C", c.work])
         src = os.path.join(c.work, "%s-%s" % (name, ver))
         build = os.path.join(c.work, name + "-build")

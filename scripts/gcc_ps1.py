@@ -5,8 +5,8 @@ import gcc_ps2_cross as x
 TARGET = "mipsel-none-elf"
 BINUTILS = "2.45"
 GCC = "15.2.0"
-BINUTILS_URL = "https://ftp.gnu.org/gnu/binutils/binutils-%s.tar.xz" % BINUTILS
-GCC_URL = "https://ftp.gnu.org/gnu/gcc/gcc-%s/gcc-%s.tar.xz" % (GCC, GCC)
+BINUTILS_URL = "binutils/binutils-%s.tar.xz" % BINUTILS
+GCC_URL = "gcc/gcc-%s/gcc-%s.tar.xz" % (GCC, GCC)
 NATIVE_IDS = ["linux-x86_64", "linux-arm64", "linux-x86", "macos-x86_64", "macos-arm64"]
 HOST_IDS = NATIVE_IDS + x.HOST_IDS
 GCC_ARGS = ["--disable-docs", "--disable-nls", "--disable-werror", "--disable-libada", "--disable-libssp",
@@ -21,7 +21,7 @@ PRUNE = ["share/man", "share/info", "share/locale"]
 
 def fetch(c, url, name):
     archive = os.path.join(c.work, name + ".tar.xz")
-    x.run(["curl", "-fsSL", "--retry", "3", "-o", archive, url])
+    x.download(url, archive)
     x.run(["tar", "-xf", archive, "-C", c.work])
     return os.path.join(c.work, os.path.basename(url)[:-len(".tar.xz")])
 
@@ -37,13 +37,14 @@ def build_native(c, host_id):
     if host_id.startswith("linux"):
         env["LDFLAGS"] = "-static-libstdc++ -static-libgcc"
     build_args = ["--build=i686-pc-linux-gnu"] if host_id == "linux-x86" else []
+    zlib_args = ["--with-system-zlib"] if host_id.startswith("macos") else []
     x.build_deps(c, build_args)
     bsrc = fetch(c, BINUTILS_URL, "binutils")
     gsrc = fetch(c, GCC_URL, "gcc")
     x.patch_gcc_source(gsrc)
     prefix = c.ps1
     bb = x.fresh(os.path.join(c.work, "build-binutils"))
-    x.configure(bsrc, bb, ["--quiet", "--prefix=" + prefix, "--target=" + TARGET] + BINUTILS_ARGS + build_args, env)
+    x.configure(bsrc, bb, ["--quiet", "--prefix=" + prefix, "--target=" + TARGET] + BINUTILS_ARGS + build_args + zlib_args, env)
     x.make(bb, [], env)
     x.make(bb, ["install-strip"], env)
     env["PATH"] = os.path.join(prefix, "bin") + os.pathsep + env["PATH"]
@@ -51,7 +52,7 @@ def build_native(c, host_id):
     env["CFLAGS_FOR_TARGET"] = x.TARGET_CFLAGS
     env["CXXFLAGS_FOR_TARGET"] = x.TARGET_CFLAGS
     args = (["--quiet", "--prefix=" + prefix, "--target=" + TARGET, "--with-gmp=" + c.deps,
-             "--with-mpfr=" + c.deps, "--with-mpc=" + c.deps] + GCC_ARGS + build_args)
+             "--with-mpfr=" + c.deps, "--with-mpc=" + c.deps] + GCC_ARGS + build_args + zlib_args)
     x.configure(gsrc, gb, args, env)
     x.make(gb, ["all"], env)
     x.make(gb, ["install-strip"], env)

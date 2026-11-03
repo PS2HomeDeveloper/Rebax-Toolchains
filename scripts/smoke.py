@@ -9,7 +9,8 @@ HELLO_CPP = (
     '  catch (const std::exception &e) { std::cout << v[0] << "_" << v[1] << std::endl; return 0; }\n'
     "  return 1;\n}\n"
 )
-SDL_C = "#include <SDL.h>\nint main(void) { SDL_version v; SDL_GetVersion(&v); return v.major == 2 ? 0 : 1; }\n"
+SDL_C = ("#include <SDL.h>\nint main(int argc, char *argv[]) {\n  SDL_version v;\n  (void)argc; (void)argv;\n"
+         "  SDL_GetVersion(&v);\n  return v.major == 2 ? 0 : 1;\n}\n")
 
 LINUX = {"linux-x86_64": "x86_64-linux-musl", "linux-x86": "i686-linux-musl", "linux-arm64": "aarch64-linux-musl",
          "linux-arm": "armv7-linux-musleabihf"}
@@ -114,6 +115,33 @@ def flags(target, sdk, empty):
             "link_cxx": link + ["@OBJ@", "-lc++", "-lSystem"] + rtlib, "ext": ""}
 
 
+def make_overlay(cc, clang_dir, target, sdk, work):
+    ov = os.path.join(work, "resource-" + target)
+    if os.path.exists(ov):
+        shutil.rmtree(ov)
+    inc = glob.glob(os.path.join(clang_dir, "lib", "clang", "*", "include"))
+    if not inc:
+        sys.exit("clang resource headers not found")
+    shutil.copytree(inc[0], os.path.join(ov, "include"))
+    t = flags_target(target)
+    p = subprocess.run([cc, "--target=" + t, "-resource-dir", ov, "-print-runtime-dir"], stdout=subprocess.PIPE,
+                       universal_newlines=True)
+    rtdir = p.stdout.strip()
+    builtins = glob.glob(os.path.join(sdk, "runtime", "lib", "**", "libclang_rt.builtins*.a"), recursive=True)
+    if not rtdir or not builtins:
+        sys.exit("cannot prepare compiler-rt for " + target)
+    os.makedirs(rtdir, exist_ok=True)
+    shutil.copy2(builtins[0], os.path.join(rtdir, "libclang_rt.builtins.a"))
+    print("compiler-rt placed in " + rtdir)
+    return ov
+
+
+def flags_target(target):
+    if target in ANDROID:
+        return ANDROID[target][0] + "21"
+    return WINDOWS[target][0]
+
+
 def sh(cmd, cwd):
     print("+ " + " ".join(cmd), flush=True)
     p = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
@@ -128,6 +156,10 @@ def run_target(target, clang_dir, sdk, work, run):
     ext = ".exe" if os.name == "nt" else ""
     cc = os.path.join(clang_dir, "bin", "clang" + ext)
     cxx = os.path.join(clang_dir, "bin", "clang++" + ext)
+    if target in ANDROID or target in WINDOWS:
+        ov = make_overlay(cc, clang_dir, target, sdk, work)
+        for key in ("cc", "cxx", "link_c", "link_cxx"):
+            fl[key] = ["-resource-dir", ov] + fl[key]
     out = os.path.join(work, target)
     os.makedirs(out, exist_ok=True)
     for name, text in (("hello.c", HELLO_C), ("hello.cpp", HELLO_CPP), ("sdl.c", SDL_C)):

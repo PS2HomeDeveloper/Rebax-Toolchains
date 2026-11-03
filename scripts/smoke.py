@@ -1,4 +1,4 @@
-import argparse, glob, os, shutil, struct, subprocess, sys, tarfile
+import argparse, glob, os, platform, shutil, struct, subprocess, sys, tarfile
 
 HELLO_C = '#include <stdio.h>\nint main(void) { printf("REBAX_OK\\n"); return 0; }\n'
 HELLO_CPP = (
@@ -181,7 +181,9 @@ def run_target(target, clang_dir, sdk, work, run):
                 print("wrong architecture: " + exe)
             if run:
                 prefix = []
-                if target in QEMU and shutil.which(QEMU[target]):
+                if target == "linux-arm64" and platform.machine().lower() in ("aarch64", "arm64"):
+                    prefix = []
+                elif target in QEMU and shutil.which(QEMU[target]):
                     prefix = [QEMU[target]]
                 elif target in QEMU:
                     prefix = None

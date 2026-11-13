@@ -43,7 +43,7 @@ def prune(ps2dev):
 
 
 EE_TRIPLE = "mips64r5900el-ps2-elf"
-KEEP_LIB = ("libstdc++", "libsupc++", "libatomic", "ldscripts")
+KEEP_LIB = ("libstdc++", "libsupc++", "libatomic", "ldscripts", "crt0.o")
 
 
 def remove_path(path):

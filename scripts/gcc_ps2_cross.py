@@ -478,9 +478,8 @@ def build_ee(c):
     for rel in ("lib/gcc/%s/%s/libgcc.a" % (EE, ver), "%s/lib/libstdc++.a" % EE, "%s/include/c++" % EE):
         if not os.path.exists(os.path.join(dst, rel)):
             sys.exit("missing after copy: " + rel)
-    crt0 = os.path.join(dst, EE, "lib", "crt0.o")
-    if os.path.exists(crt0):
-        os.remove(crt0)
+    if not os.path.exists(os.path.join(dst, EE, "lib", "crt0.o")):
+        sys.exit("missing after copy: %s/lib/crt0.o" % EE)
 
 
 def build_iop(c):

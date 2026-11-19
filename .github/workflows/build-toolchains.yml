@@ -7,19 +7,6 @@ on:
       - "scripts/**"
       - ".github/workflows/build-toolchains.yml"
   workflow_dispatch:
-    inputs:
-      toolchain:
-        description: Build only this toolchain group (empty = all)
-        default: ""
-      only:
-        description: Build only this package or host id (empty = all)
-        default: ""
-      llvm_version:
-        description: LLVM version
-        default: "20.1.8"
-      release_tag:
-        description: Upload to this release tag (empty = the latest release)
-        default: ""
 
 jobs:
   plan:
@@ -29,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: m
-        run: python3 scripts/common.py matrix --toolchain "${{ inputs.toolchain }}" --only "${{ inputs.only }}"
+        run: python3 scripts/common.py matrix 
 
   build:
     needs: plan
@@ -57,7 +44,7 @@ jobs:
         if: matrix.toolchain == 'clang'
         shell: bash
         run: |
-          curl -fsSL -o llvm-src.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ inputs.llvm_version || '20.1.8' }}/llvm-project-${{ inputs.llvm_version || '20.1.8' }}.src.tar.xz"
+          curl -fsSL -o llvm-src.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/llvm-project-20.1.8.src.tar.xz"
           mkdir llvm-src
           if [ "$RUNNER_OS" = "Windows" ]; then
             tar -xf llvm-src.tar.xz -C llvm-src --strip-components=1 --exclude='*/test/*' --exclude='*/unittests/*'
@@ -198,7 +185,7 @@ jobs:
           merge-multiple: true
       - name: Publish to the latest release
         run: |
-          tag="${{ inputs.release_tag }}"
+          tag=""
           if [ -z "$tag" ]; then tag=$(gh release view --json tagName -q .tagName 2>/dev/null || true); fi
           if [ -z "$tag" ]; then tag=v1.0.0; gh release create "$tag" --title "$tag" --notes ""; fi
           gh release download "$tag" --pattern manifest.json --dir dist 2>/dev/null || true

@@ -2,10 +2,6 @@ name: Test clang packages
 
 on:
   workflow_dispatch:
-    inputs:
-      sdk_repo:
-        description: Repository that holds the SDK releases
-        default: PS2HomeDeveloper/Rebax-SDKs
 
 jobs:
   test:
@@ -58,7 +54,7 @@ jobs:
           mkdir -p pkgs/tc pkgs/sdk
           gh release download --repo "${{ github.repository }}" --pattern "rebax-clang-${{ matrix.host }}.tar.xz" --dir pkgs/tc
           for t in ${{ matrix.targets }}; do
-            gh release download --repo "${{ inputs.sdk_repo }}" --pattern "rebax-sdk-$t.tar.xz" --dir pkgs/sdk
+            gh release download --repo "PS2HomeDeveloper/Rebax-SDKs" --pattern "rebax-sdk-$t.tar.xz" --dir pkgs/sdk
           done
           ls -la pkgs/tc pkgs/sdk
 

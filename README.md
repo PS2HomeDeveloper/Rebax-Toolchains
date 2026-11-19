@@ -48,6 +48,10 @@ Rebax treats a package as installed when its folder exists, so no other step is 
 
 See [docs/building_packages.md](docs/building_packages.md).
 
+## Contributing
+
+Issues and discussions for the whole project are in the [Rebax repository](https://github.com/PS2HomeDeveloper/Rebax). See [CONTRIBUTING.md](CONTRIBUTING.md) for changes to this repository.
+
 ## License
 
-This repository is released under the [MIT License](LICENSE). The packages contain software from other projects, each under its own license. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The scripts and documentation in this repository are released under the [MIT License](LICENSE). The packages contain software from other projects, each under its own license. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

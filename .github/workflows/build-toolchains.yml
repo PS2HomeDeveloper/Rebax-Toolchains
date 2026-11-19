@@ -1,6 +1,11 @@
 name: Build toolchains
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - ".github/workflows/build-toolchains.yml"
   workflow_dispatch:
     inputs:
       toolchain:
@@ -52,7 +57,7 @@ jobs:
         if: matrix.toolchain == 'clang'
         shell: bash
         run: |
-          curl -fsSL -o llvm-src.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ inputs.llvm_version }}/llvm-project-${{ inputs.llvm_version }}.src.tar.xz"
+          curl -fsSL -o llvm-src.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ inputs.llvm_version || '20.1.8' }}/llvm-project-${{ inputs.llvm_version || '20.1.8' }}.src.tar.xz"
           mkdir llvm-src
           if [ "$RUNNER_OS" = "Windows" ]; then
             tar -xf llvm-src.tar.xz -C llvm-src --strip-components=1 --exclude='*/test/*' --exclude='*/unittests/*'

@@ -7,11 +7,12 @@ The toolchain packages are built from the projects below. Each project keeps its
 | LLVM, Clang and LLD | Compiler and linker for Android, Linux, Windows, macOS and iOS | Apache License 2.0 with LLVM Exceptions | https://github.com/llvm/llvm-project |
 | GCC 15.2.0 | C and C++ compiler for PlayStation 1 | GNU GPL 3.0 or later | https://gcc.gnu.org |
 | GNU Binutils 2.45 | Assembler and linker for PlayStation 1 | GNU GPL 3.0 or later | https://www.gnu.org/software/binutils/ |
-| ps2toolchain (dvp, iop, ee) | GCC and Binutils for the PlayStation 2 processors, with the patches of the ps2dev project | GNU GPL 3.0 or later, and the licenses of the ps2dev scripts and patches | https://github.com/ps2dev/ps2toolchain-ee, https://github.com/ps2dev/ps2toolchain-iop, https://github.com/ps2dev/ps2toolchain-dvp |
+| GCC 15.2.0 (PlayStation 2 EE) | C and C++ compiler for the PlayStation 2 Emotion Engine, using the PlayStation 2 patches of the ps2dev project | GNU GPL 3.0 or later | https://gcc.gnu.org, patches: https://github.com/ps2dev/gcc |
+| GNU Binutils 2.45 (PlayStation 2 EE, IOP, DVP) | Assembler and linker for the PlayStation 2 processors, using the PlayStation 2 patches of the ps2dev project | GNU GPL 3.0 or later | https://www.gnu.org/software/binutils/, patches: https://github.com/ps2dev/binutils-gdb |
 
 ## Source code of the GPL programs
 
-The GCC and Binutils programs in the packages are built unmodified from the upstream releases named above, together with the patches of the ps2dev project for the PlayStation 2. The build scripts in the `scripts` folder of this repository show exactly which sources and options were used.
+The GCC and Binutils programs in the packages are built from the upstream GNU sources named above. For the PlayStation 2 processors the upstream sources do not support the target, so the packages use the patched sources of the ps2dev project (the repositories linked above), at the versions recorded in the `SOURCE.txt` file of each package. The build scripts in the `scripts` folder of this repository show exactly which sources and options were used.
 
 You can obtain the complete corresponding source code from the upstream project pages in the table. If you cannot get it from there, open an issue in the [Rebax repository](https://github.com/PS2HomeDeveloper/Rebax/issues) and it will be provided.
 

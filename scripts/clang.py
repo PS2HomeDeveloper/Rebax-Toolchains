@@ -63,8 +63,12 @@ def platform_args(kind, arch):
                 "-DANDROID_ABI=" + arch, "-DANDROID_PLATFORM=android-24",
                 "-DANDROID_STL=c++_static", "-DLLVM_HOST_TRIPLE=" + ANDROID_ABI[arch]], False
     if kind == "windows":
-        return ["-DCMAKE_C_COMPILER=cl", "-DCMAKE_CXX_COMPILER=cl",
-                "-DLLVM_USE_CRT_RELEASE=MT"], True
+        flags = ["-DCMAKE_C_COMPILER=cl", "-DCMAKE_CXX_COMPILER=cl",
+                 "-DLLVM_USE_CRT_RELEASE=MT"]
+        if arch == "arm64":
+            flags += ["-DCMAKE_C_FLAGS_RELEASE=/O1 /Ob1 /DNDEBUG",
+                      "-DCMAKE_CXX_FLAGS_RELEASE=/O1 /Ob1 /DNDEBUG"]
+        return flags, True
     if kind == "windowsarm":
         triple = "armv7-w64-mingw32"
         return ["-DCMAKE_SYSTEM_NAME=Windows", "-DCMAKE_SYSTEM_PROCESSOR=ARM",
